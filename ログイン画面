@@ -1,0 +1,187 @@
+/***********************************************************************
+***********************************************************************/
+using MTMS.Common;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Diagnostics;
+using System.Reflection;
+
+namespace MTMS
+{
+    public partial class M0101W01Page : System.Web.UI.Page
+    {
+
+        #region --- 定数宣言
+        private const string FUNCTION_ID = "M0101W01";
+        #endregion
+
+        #region --- 初期表示時処理
+        /// <summary>
+        /// 初期表示時処理
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            //セッション情報クリア
+            this.Session.RemoveAll();
+
+            //決まり文句
+            M0002C01 log = new M0002C01(FUNCTION_ID, string.Empty);
+            // メソッド名取得
+            StackFrame sf = new StackFrame();
+            MethodBase mb = sf.GetMethod();
+
+            log.DebugLog(Const.LOG_START + mb.Name + " 初期表示時処理");
+
+            // ポストバック時はリターン（何も処理しない）
+            if (IsPostBack == true)
+            {
+                log.DebugLog(Const.LOG_END + mb.Name + " 初期表示時処理 ポストバック時はリターン");
+                return;
+            }
+           
+            //フィールド情報削除
+            if (!string.IsNullOrEmpty(this.txtUserID.Text))
+            {
+                this.txtPassword.Text = "";
+            }
+            else
+            {
+                this.txtUserID.Text = "";
+                this.txtPassword.Text = "";
+            }
+            
+            //フォーカスをセット
+            this.txtUserID.Focus();
+            log.DebugLog(Const.LOG_END + mb.Name + " 初期表示時処理");
+        }
+        #endregion
+
+        #region --- ログインボタン押下
+        /// <summary>
+        /// ログインボタン押下
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        protected void btnLogin_Click(object sender, EventArgs e)
+        {
+
+            //セッションクリア
+            this.Session.RemoveAll();
+
+            //決まり文句
+            M0002C01 log = new M0002C01(FUNCTION_ID, string.Empty);
+            // メソッド名取得
+            StackFrame sf = new StackFrame();
+            MethodBase mb = sf.GetMethod();
+
+            log.DebugLog(Const.LOG_START + mb.Name + " ログインボタン押下");
+
+            Dictionary<String, Object> dicRec = new Dictionary<String, Object>();
+            Dictionary<String, Object> dicMsg = new Dictionary<String, Object>();
+            string strSysActiveKbn = string.Empty;
+            string[] sPara = new string[2];
+            string sCompId = string.Empty;
+            string sDeptId = string.Empty;
+            string sUserId = string.Empty;
+            DataTable dtLoginInfo = new DataTable();
+            DataTable dtResult = new DataTable();
+
+            M0007C01 objM0007C01 = new M0007C01();
+            M0006C01 objM0006C01 = new M0006C01();
+            M0101W01Service objM0101W01 = new M0101W01Service();
+
+
+            // 稼動状態チェック
+            dicRec = objM0007C01.chkSystemActive(Const.TERMINAL_MANAGE);
+            if (dicRec != null)
+            {
+                strSysActiveKbn = dicRec["RetData"].ToString();
+                if (strSysActiveKbn.Equals(Const.FLG_OFF))
+                {
+                    //オフライン中
+                    //[02][20130606][mod][uematsu][start]
+                    //Server.Transfer("./syserror.htm");
+                    Server.Transfer("./sysoffline.htm");
+                    //[02][20130606][mod][uematsu][end]
+                }
+            }
+            else
+            {
+                //稼動情報が取得できない場合エラー
+                Server.Transfer("./syserror.htm");
+            }
+            // ログイン認証
+            // 入力チェック
+            if (string.IsNullOrEmpty(this.txtUserID.Text))
+            {
+                //ログインID未入力
+                sPara[0] = "ログインID";
+                dicMsg = objM0007C01.getMessage("WEB00002_E", sPara, Const.TERMINAL_MANAGE);
+                this.txtErrMsg.Text = dicMsg["RetMsg"].ToString();
+                return;
+            }
+            if (string.IsNullOrEmpty(this.txtPassword.Text))
+            {
+                //パスワード未入力
+                sPara[0] = "パスワード";
+                dicMsg = objM0007C01.getMessage("WEB00002_E", sPara, Const.TERMINAL_MANAGE);
+                this.txtErrMsg.Text = dicMsg["RetMsg"].ToString();
+                return;
+            }
+
+            dtLoginInfo = objM0101W01.LoginAuth(this.txtUserID.Text, this.txtPassword.Text);
+
+            if (dtLoginInfo == null || dtLoginInfo.Rows.Count == 0)
+            {
+                //ログイン失敗
+                this.txtPassword.Text = "";
+                dicMsg = objM0007C01.getMessage("WEB00010_E", Const.TERMINAL_MANAGE);
+                this.txtErrMsg.Text = dicMsg["RetMsg"].ToString();
+                this.txtPassword.Focus();
+
+            }
+            else
+            {
+                // ユーザ情報をセッションに保存
+                this.Session.Add(Const.LOGIN_INFO, dtLoginInfo);
+                log = new M0002C01(FUNCTION_ID, string.Empty);
+
+                sCompId = Convert.ToString(dtLoginInfo.Rows[0][Const.LOGIN_COMPANY_ID]);
+                sDeptId = Convert.ToString(dtLoginInfo.Rows[0][Const.LOGIN_DEPT_ID]);
+                sUserId = Convert.ToString(dtLoginInfo.Rows[0][Const.LOGIN_LOGIN_ID]);
+
+                if (sDeptId.Equals(Const.DEPT_ID_COMMON))
+                {
+                    sDeptId = string.Empty;
+                }
+
+                log.SystemLog(Const.LOG_TITLE_CERTIFICATE + ",[" + Const.LOG_KEY_COMPANY_ID + sCompId.PadRight(8) + "],[" + Const.LOG_KEY_DEPT_ID + sDeptId.PadRight(8) + "],[" + Const.LOG_KEY_USER_ID + sUserId.PadRight(8) + "],[" + Const.LOG_KEY_TERM_KBN + Const.TERMINAL_MANAGE.PadRight(8) + "]");
+                // 画面遷移
+                Server.Transfer("./M0102W01.aspx");
+            }
+            log.DebugLog(Const.LOG_END + mb.Name + " ログインボタン押下");
+
+        }
+        #endregion 
+
+        #region --- クリアボタン押下
+        /// <summary>
+        /// クリアボタン押下
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        protected void btnClear_Click(object sender, EventArgs e)
+        {
+            //クリア処理
+            this.txtUserID.Text = "";
+            this.txtPassword.Text = "";
+            this.txtErrMsg.Text = "";
+        }
+        #endregion 
+
+    }
+
+}
